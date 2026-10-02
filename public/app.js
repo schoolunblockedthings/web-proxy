@@ -1,26 +1,134 @@
 const tabsEl=document.getElementById("tabs"),frame=document.getElementById("frame"),homePage=document.getElementById("homePage"),address=document.getElementById("address"),addressForm=document.getElementById("addressForm"),homeForm=document.getElementById("homeForm"),homeInput=document.getElementById("homeInput"),error=document.getElementById("error");
 let tabs=[],active=0;
 const KEY="proxy-theme";
-function makeTab(url=null){const id=Date.now()+Math.random();tabs.push({id,url,title:url?new URL(url).hostname:"New Tab",history:[],pos:-1});active=tabs.length-1;renderTabs();load(url,false)}
+
+function makeTab(url=null){
+  const id=Date.now()+Math.random();
+  tabs.push({id,url,title:url?new URL(url).hostname:"New Tab",history:[],pos:-1});
+  active=tabs.length-1;
+  renderTabs();
+  load(url,false);
+}
 function current(){return tabs[active]}
-function renderTabs(){tabsEl.innerHTML="";tabs.forEach((t,i)=>{const el=document.createElement("div");el.className="tab"+(i===active?" active":"");el.innerHTML='<span>🌐</span><span class="tab-title"></span><button class="tab-close" title="Close">×</button>';el.querySelector(".tab-title").textContent=t.title;el.addEventListener("click",()=>{active=i;renderTabs();showCurrent()});el.querySelector(".tab-close").addEventListener("click",e=>{e.stopPropagation();closeTab(i)});tabsEl.appendChild(el)})}
-function closeTab(i){if(tabs.length===1){tabs[0]={...tabs[0],url:null,title:"New Tab",history:[],pos:-1};active=0}else{tabs.splice(i,1);active=Math.min(active,tabs.length-1)}renderTabs();showCurrent()}
-function normalize(v){v=v.trim();if(!v)return null;if(!/^https?:\/\//i.test(v))v="https://"+v;try{const u=new URL(v);return /^https?:$/.test(u.protocol)?u.href:null}catch{return null}}
-function proxyUrl(url){return "/proxy?url="+encodeURIComponent(url)}
-function showError(message){error.textContent=message;error.hidden=false}
+function renderTabs(){
+  tabsEl.innerHTML="";
+  tabs.forEach((t,i)=>{
+    const el=document.createElement("div");
+    el.className="tab"+(i===active?" active":"");
+    el.innerHTML='<span>🌐</span><span class="tab-title"></span><button class="tab-close" title="Close">×</button>';
+    el.querySelector(".tab-title").textContent=t.title;
+    el.addEventListener("click",()=>{active=i;renderTabs();showCurrent()});
+    el.querySelector(".tab-close").addEventListener("click",e=>{e.stopPropagation();closeTab(i)});
+    tabsEl.appendChild(el);
+  });
+}
+function closeTab(i){
+  if(tabs.length===1){
+    tabs[0]={...tabs[0],url:null,title:"New Tab",history:[],pos:-1};
+    active=0;
+  }else{
+    tabs.splice(i,1);
+    active=Math.min(active,tabs.length-1);
+  }
+  renderTabs();
+  showCurrent();
+}
+function normalize(v){
+  v=v.trim();
+  if(!v)return null;
+  if(!/^https?:\/\//i.test(v))v="https://"+v;
+  try{
+    const u=new URL(v);
+    return /^https?:$/.test(u.protocol)?u.href:null;
+  }catch{return null}
+}
+function proxyUrl(url){return window.location.origin+"/proxy?url="+encodeURIComponent(url)}
+function showError(message){
+  homePage.hidden=false;
+  frame.hidden=true;
+  error.textContent=message;
+  error.hidden=false;
+}
 function clearError(){error.hidden=true;error.textContent=""}
-function load(url,push=true){const t=current();if(!url){t.url=null;t.title="New Tab";frame.hidden=true;homePage.hidden=false;address.value="";clearError();return}if(push){t.history=t.history.slice(0,t.pos+1);t.history.push(url);t.pos++}t.url=url;try{t.title=new URL(url).hostname}catch{}address.value=url;homePage.hidden=true;frame.hidden=false;clearError();frame.src=proxyUrl(url);renderTabs()}
-function showCurrent(){const t=current();if(t.url){address.value=t.url;homePage.hidden=true;frame.hidden=false;clearError();frame.src=proxyUrl(t.url)}else load(null,false)}
-function navigate(value){const url=normalize(value);if(!url){showError("Enter a valid web address, such as example.com.");return}load(url,true)}
+
+async function checkBackend(){
+  try{
+    const response=await fetch("/health",{cache:"no-store"});
+    if(!response.ok)throw new Error("HTTP "+response.status);
+    const data=await response.json();
+    if(!data.ok)throw new Error("Backend not ready");
+    return true;
+  }catch{
+    showError("The Node.js proxy is not connected. Open the Render .onrender.com URL for this app, not the GitHub Pages URL.");
+    return false;
+  }
+}
+
+async function load(url,push=true){
+  const t=current();
+  if(!url){
+    t.url=null;t.title="New Tab";frame.hidden=true;homePage.hidden=false;address.value="";clearError();return;
+  }
+  const backendReady=await checkBackend();
+  if(!backendReady)return;
+
+  if(push){
+    t.history=t.history.slice(0,t.pos+1);
+    t.history.push(url);
+    t.pos++;
+  }
+  t.url=url;
+  try{t.title=new URL(url).hostname}catch{}
+  address.value=url;
+  homePage.hidden=true;
+  frame.hidden=false;
+  clearError();
+  frame.src=proxyUrl(url);
+  renderTabs();
+}
+function showCurrent(){
+  const t=current();
+  if(t.url){
+    address.value=t.url;
+    homePage.hidden=true;
+    frame.hidden=false;
+    clearError();
+    frame.src=proxyUrl(t.url);
+  }else{
+    load(null,false);
+  }
+}
+function navigate(value){
+  const url=normalize(value);
+  if(!url){showError("Enter a valid web address, such as example.com.");return}
+  load(url,true);
+}
+
 addressForm.addEventListener("submit",e=>{e.preventDefault();navigate(address.value)});
 homeForm.addEventListener("submit",e=>{e.preventDefault();navigate(homeInput.value)});
-frame.addEventListener("error",()=>showError("The proxy server could not load that page. Make sure the Node.js server is deployed and /proxy is reachable."));
-document.getElementById("back").onclick=()=>{const t=current();if(t.pos>0){t.pos--;t.url=t.history[t.pos];showCurrent()}};
-document.getElementById("forward").onclick=()=>{const t=current();if(t.pos<t.history.length-1){t.pos++;t.url=t.history[t.pos];showCurrent()}};
-document.getElementById("reload").onclick=()=>{const t=current();if(t.url)showCurrent()};
+frame.addEventListener("load",()=>{if(current().url)clearError()});
+frame.addEventListener("error",()=>showError("The proxy server could not load that page. Check the Render service logs for the /proxy request."));
+
+document.getElementById("back").onclick=()=>{
+  const t=current();
+  if(t.pos>0){t.pos--;t.url=t.history[t.pos];showCurrent()}
+};
+document.getElementById("forward").onclick=()=>{
+  const t=current();
+  if(t.pos<t.history.length-1){t.pos++;t.url=t.history[t.pos];showCurrent()}
+};
+document.getElementById("reload").onclick=()=>{
+  const t=current();
+  if(t.url)showCurrent();
+};
 document.getElementById("home").onclick=()=>load(null,false);
 document.getElementById("newTab").onclick=()=>makeTab();
-function setTheme(light){document.body.classList.toggle("light",light);document.getElementById("theme").textContent=light?"☾":"☀";localStorage.setItem(KEY,light?"light":"dark")}
+
+function setTheme(light){
+  document.body.classList.toggle("light",light);
+  document.getElementById("theme").textContent=light?"☾":"☀";
+  localStorage.setItem(KEY,light?"light":"dark");
+}
 document.getElementById("theme").onclick=()=>setTheme(!document.body.classList.contains("light"));
 setTheme(localStorage.getItem(KEY)==="light");
 makeTab();
