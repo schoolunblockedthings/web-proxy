@@ -1,0 +1,12 @@
+{
+  "name": "web-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.js" },
+  "dependencies": {
+    "express": "^5.1.0",
+    "cheerio": "^1.1.2",
+    "undici": "^7.16.0"
+  }
+}
