@@ -38,6 +38,40 @@ function clearError(){
   error.textContent="";
 }
 
+function recoverEscapedNavigation(tab, frame){
+  if(!tab || !tab.url || !frame) return false;
+  try{
+    const frameUrl=new URL(frame.contentWindow.location.href);
+    const appOrigin=window.location.origin;
+
+    if(frameUrl.origin!==appOrigin || frameUrl.pathname==="/proxy") return false;
+
+    const currentTarget=new URL(tab.url);
+    const escapedPath=frameUrl.pathname+frameUrl.search+frameUrl.hash;
+    const target=new URL(escapedPath,currentTarget.origin).href;
+
+    if(target===tab.url || tab.recovering) return false;
+
+    tab.recovering=true;
+    tab.history=tab.history.slice(0,tab.pos+1);
+    tab.history.push(target);
+    tab.pos++;
+    tab.url=target;
+    tab.title=new URL(target).hostname;
+    tab.icon=null;
+    address.value=target;
+    frame.src=proxyUrl(target);
+
+    setTimeout(function(){
+      tab.recovering=false;
+    },1000);
+
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
 function createFrame(tab){
   const frame=document.createElement("iframe");
   frame.className="tab-frame";
@@ -45,6 +79,12 @@ function createFrame(tab){
   frame.hidden=true;
   frame.addEventListener("load",function(){
     if(!tabs.includes(tab)) return;
+
+    if(recoverEscapedNavigation(tab,frame)){
+      if(current()===tab) renderTabs();
+      return;
+    }
+
     try{
       const title=frame.contentDocument && frame.contentDocument.title;
       if(title && title.trim()){
@@ -103,7 +143,7 @@ function renderTabs(){
 }
 
 function makeTab(){
-  const tab={url:null,title:"New Tab",history:[],pos:-1,icon:null,frame:null};
+  const tab={url:null,title:"New Tab",history:[],pos:-1,icon:null,frame:null,recovering:false};
   tabs.push(tab);
   createFrame(tab);
   active=tabs.length-1;
@@ -139,6 +179,7 @@ function openUrl(url,push){
     tab.icon=null;
     tab.history=[];
     tab.pos=-1;
+    tab.recovering=false;
     address.value="";
     if(tab.frame) tab.frame.hidden=true;
     homePage.hidden=false;
@@ -156,6 +197,7 @@ function openUrl(url,push){
   tab.url=url;
   tab.title=new URL(url).hostname;
   tab.icon=null;
+  tab.recovering=false;
   address.value=url;
   homePage.hidden=true;
   clearError();
@@ -209,6 +251,7 @@ document.getElementById("back").addEventListener("click",function(){
     tab.url=tab.history[tab.pos];
     tab.title=new URL(tab.url).hostname;
     tab.icon=null;
+    tab.recovering=false;
     if(tab.frame) tab.frame.src=proxyUrl(tab.url);
     showCurrent();
   }
@@ -221,6 +264,7 @@ document.getElementById("forward").addEventListener("click",function(){
     tab.url=tab.history[tab.pos];
     tab.title=new URL(tab.url).hostname;
     tab.icon=null;
+    tab.recovering=false;
     if(tab.frame) tab.frame.src=proxyUrl(tab.url);
     showCurrent();
   }
