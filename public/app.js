@@ -1,0 +1,2 @@
+const form=document.getElementById("proxyForm"),input=document.getElementById("url"),error=document.getElementById("error");
+form.addEventListener("submit",e=>{e.preventDefault();error.hidden=true;let value=input.value.trim();if(!value)return;if(!/^https?:\/\//i.test(value))value="https://"+value;try{const u=new URL(value);if(!["http:","https:"].includes(u.protocol))throw 0;location.href="/proxy?url="+encodeURIComponent(u.href)}catch{error.textContent="Please enter a valid HTTP or HTTPS URL.";error.hidden=false}});
