@@ -70,7 +70,7 @@ function upstreamUrlFromProxy(value) {
   }
 }
 
-function requestHeaders(req, targetUrl = null) {
+// Browser-style request headers keep upstream sites compatible with normal navigation.\nfunction requestHeaders(req, targetUrl = null) {
   const headers = {
     "user-agent": req.get("user-agent") || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
     "accept": req.get("accept") || "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
