@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Web Proxy</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <div class="brand"><span class="logo">↗</span><div><h1>Web Proxy</h1><p>Browse through your proxy server</p></div></div>
+      <form id="proxyForm">
+        <label for="url">Website URL</label>
+        <div class="bar">
+          <input id="url" name="url" type="text" placeholder="https://example.com" autocomplete="url" required>
+          <button type="submit">Go</button>
+        </div>
+      </form>
+      <p class="hint">Enter a public HTTP or HTTPS website. Private-network destinations are blocked.</p>
+      <div id="error" class="error" hidden></div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
