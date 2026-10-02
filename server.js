@@ -224,5 +224,44 @@ app.all("/proxy", async (req, res) => {
   }
 });
 
+app.use(async (req, res, next) => {
+  if (req.path === "/health" || req.path === "/proxy" || req.path.startsWith("/assets/")) return next();
+  const referer = req.get("referer");
+  if (!referer) return next();
+
+  try {
+    const ref = new URL(referer);
+    if (ref.pathname !== "/proxy") return next();
+
+    const proxied = ref.searchParams.get("url");
+    if (!proxied) return next();
+
+    const base = new URL(proxied);
+    const target = new URL(req.originalUrl, base);
+    const result = await safeFetch(target, {
+      method: req.method,
+      headers: requestHeaders(req),
+      body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body
+    });
+
+    const type = result.response.headers.get("content-type") || "application/octet-stream";
+    const body = Buffer.from(await result.response.arrayBuffer());
+    if (body.length > MAX_BYTES) return res.status(413).send("Response is too large.");
+
+    res.status(result.response.status);
+    res.set("x-proxy-url", result.url.href);
+
+    if (/text\/html|application\/xhtml\+xml/i.test(type)) {
+      res.type("html").send(rewriteHtml(body.toString("utf8"), result.url));
+    } else if (/text\/css/i.test(type)) {
+      res.set("content-type", type).send(rewriteCss(result.url, body.toString("utf8")));
+    } else {
+      res.set("content-type", type).send(body);
+    }
+  } catch {
+    next();
+  }
+});
+
 app.get("/health", (_, res) => res.json({ ok: true }));
 app.listen(PORT, () => console.log("Web proxy listening on port " + PORT));
