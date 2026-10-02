@@ -6,7 +6,7 @@ import { fetch, Agent } from "undici";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_BYTES = 25 * 1024 * 1024;
 const TIMEOUT_MS = 20000;
 const agent = new Agent({ connect: { timeout: TIMEOUT_MS } });
 
