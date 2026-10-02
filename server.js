@@ -127,11 +127,15 @@ function rewriteCss(base, css) {
   return css.replace(/url\((\s*["\']?)([^"\')]+)(["\']?\s*)\)/gi,
     (_, before, value, after) => "url(" + before + proxiedUrl(base, value.trim()) + after + ")");
 }
-function runtimeBridge() {
+function runtimeBridge(siteBase) {
   return '<script>' +
     '(function(){' +
+    'const siteBase='+JSON.stringify(siteBase)+';' +
     'const proxy=function(value){' +
-    'try{const u=new URL(value,document.baseURI);' +
+    'try{' +
+    'const raw=String(value||"");' +
+    'if(!raw)return raw;' +
+    'const u=new URL(raw,siteBase);' +
     'if(u.protocol==="http:"||u.protocol==="https:") return "/proxy?url="+encodeURIComponent(u.href);' +
     '}catch(e){} return value;};' +
     'const originalFetch=window.fetch;' +
@@ -174,7 +178,7 @@ function rewriteHtml(html, baseUrl) {
     const match=content.match(/url=(.+)$/i);
     if (match) $(el).attr("content", content.slice(0, match.index) + "url=" + proxiedUrl(resourceBase, match[1]));
   });
-  $("head").prepend(runtimeBridge());
+  $("head").prepend(runtimeBridge(resourceBase));
   return $.html();
 }
 
