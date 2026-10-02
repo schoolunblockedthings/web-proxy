@@ -7,7 +7,7 @@ import { fetch, Agent } from "undici";
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MAX_BYTES = 8 * 1024 * 1024;
-const TIMEOUT_MS = 15000;
+const TIMEOUT_MS = 20000;
 const agent = new Agent({ connect: { timeout: TIMEOUT_MS } });
 
 function normalizeUrl(value) {
@@ -58,22 +58,45 @@ async function assertPublicHost(hostname) {
   }
 }
 
-async function safeFetch(startUrl) {
+function requestHeaders(req) {
+  const headers = {
+    "user-agent": req.get("user-agent") || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
+    "accept": req.get("accept") || "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "accept-language": req.get("accept-language") || "en-US,en;q=0.9"
+  };
+  for (const name of ["cookie","content-type","referer","origin","authorization","range"]) {
+    const value = req.get(name);
+    if (value) headers[name] = value;
+  }
+  return headers;
+}
+
+async function safeFetch(startUrl, options = {}) {
   let current = startUrl;
+  let method = options.method || "GET";
+  let body = options.body;
+  const headers = { ...(options.headers || {}) };
   for (let i = 0; i < 5; i++) {
     await assertPublicHost(current.hostname);
     const response = await fetch(current, {
       dispatcher: agent,
       redirect: "manual",
-      headers: {
-        "user-agent": "Mozilla/5.0 (compatible; WebProxy/1.0)",
-        "accept": "text/html,application/xhtml+xml,application/xml,image/avif,image/webp,*/*;q=0.8",
-        "accept-language": "en-US,en;q=0.9"
-      }
+      method,
+      body: ["GET","HEAD"].includes(method) ? undefined : body,
+      headers
     });
     if ([301,302,303,307,308].includes(response.status)) {
       const location = response.headers.get("location");
       if (!location) throw new Error("Invalid redirect.");
+      if (response.headers.getSetCookie) {
+        const cookies = response.headers.getSetCookie().map(v => v.split(";")[0]);
+        if (cookies.length) headers.cookie = [headers.cookie, ...cookies].filter(Boolean).join("; ");
+      }
+      if (response.status === 303 || ((response.status === 301 || response.status === 302) && method === "POST")) {
+        method = "GET";
+        body = undefined;
+        delete headers["content-type"];
+      }
       current = new URL(location, current);
       continue;
     }
@@ -122,38 +145,58 @@ function runtimeBridge() {
 }
 function rewriteHtml(html, baseUrl) {
   const $ = cheerio.load(html, { decodeEntities: false });
-  $("base[href]").each((_, el) => $(el).attr("href", proxiedUrl(baseUrl, $(el).attr("href"))));
-  $("a[href]").each((_, el) => $(el).attr("href", proxiedUrl(baseUrl, $(el).attr("href"))));
+  const declaredBase = $("base[href]").first().attr("href");
+  const resourceBase = declaredBase ? new URL(declaredBase, baseUrl).href : baseUrl.href;
+  $("base").remove();
+  $("a[href]").each((_, el) => $(el).attr("href", proxiedUrl(resourceBase, $(el).attr("href"))));
   $("img[src],script[src],iframe[src],video[src],audio[src],source[src]").each((_, el) => {
     const attr = $(el).attr("src");
-    if (attr) $(el).attr("src", proxiedUrl(baseUrl, attr));
+    if (attr) $(el).attr("src", proxiedUrl(resourceBase, attr));
   });
-  $("[srcset]").each((_, el) => $(el).attr("srcset", rewriteSrcset(baseUrl, $(el).attr("srcset"))));
-  $("[style]").each((_, el) => $(el).attr("style", rewriteCss(baseUrl, $(el).attr("style"))));
-  $("style").each((_, el) => $(el).html(rewriteCss(baseUrl, $(el).html() || "")));
-  $("link[href]").each((_, el) => $(el).attr("href", proxiedUrl(baseUrl, $(el).attr("href"))));
+  $("[srcset]").each((_, el) => $(el).attr("srcset", rewriteSrcset(resourceBase, $(el).attr("srcset"))));
+  $("[style]").each((_, el) => $(el).attr("style", rewriteCss(resourceBase, $(el).attr("style"))));
+  $("style").each((_, el) => $(el).html(rewriteCss(resourceBase, $(el).html() || "")));
+  $("link[href]").each((_, el) => $(el).attr("href", proxiedUrl(resourceBase, $(el).attr("href"))));
   $("form[action]").each((_, el) => $(el).attr("action", proxiedUrl(baseUrl, $(el).attr("action"))));
   $("meta[http-equiv='refresh']").each((_, el) => {
     const content=$(el).attr("content") || "";
     const match=content.match(/url=(.+)$/i);
-    if (match) $(el).attr("content", content.slice(0, match.index) + "url=" + proxiedUrl(baseUrl, match[1]));
+    if (match) $(el).attr("content", content.slice(0, match.index) + "url=" + proxiedUrl(resourceBase, match[1]));
   });
   $("head").prepend(runtimeBridge());
   return $.html();
 }
 
 app.use(express.static("public"));
+app.use(express.raw({ type: () => true, limit: "8mb" }));
 
-app.get("/proxy", async (req, res) => {
+app.all("/proxy", async (req, res) => {
   const target = normalizeUrl(req.query.url);
   if (!target) return res.status(400).send("Invalid URL.");
   try {
-    const { response, url } = await safeFetch(target);
+    const { response, url } = await safeFetch(target, {
+      method: req.method,
+      headers: requestHeaders(req),
+      body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body
+    });
     const type = response.headers.get("content-type") || "application/octet-stream";
     const body = Buffer.from(await response.arrayBuffer());
     if (body.length > MAX_BYTES) return res.status(413).send("Response is too large.");
     res.status(response.status);
     res.set("x-proxy-url", url.href);
+    const setCookies = response.headers.getSetCookie ? response.headers.getSetCookie() : [];
+    for (const cookie of setCookies) {
+      const rewritten = cookie
+        .replace(/;\s*Domain=[^;]+/gi, "")
+        .replace(/;\s*Path=[^;]*/gi, "; Path=/");
+      res.append("Set-Cookie", rewritten);
+    }
+    for (const header of ["cache-control","etag","last-modified","content-language","content-disposition","accept-ranges"]) {
+      const value = response.headers.get(header);
+      if (value) res.set(header, value);
+    }
+    res.removeHeader("content-security-policy");
+    res.removeHeader("content-security-policy-report-only");
     if (/text\/html|application\/xhtml\+xml/i.test(type)) {
       res.type("html").send(rewriteHtml(body.toString("utf8"), url));
     } else if (/text\/css/i.test(type)) {
