@@ -149,7 +149,8 @@ function runtimeBridge() {
     'if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;' +
     'try{const u=new URL(a.href);if((u.protocol==="http:"||u.protocol==="https:")&&u.origin!==location.origin){e.preventDefault();location.href=proxy(u.href);}}catch(err){}' +
     '},true);' +
-    'window.open=function(url){try{return window.open(proxy(url));}catch(e){return null;}};' +
+    'const originalWindowOpen=window.open;' +
+    'window.open=function(url,target,features){try{return originalWindowOpen.call(window,proxy(url),target,features);}catch(e){return null;}};' +
     '})();' +
     '</script>';
 }
