@@ -69,8 +69,21 @@ async function load(url,push=true){
   if(!url){
     t.url=null;t.title="New Tab";frame.hidden=true;homePage.hidden=false;address.value="";clearError();return;
   }
+
   const backendReady=await checkBackend();
   if(!backendReady)return;
+
+  const target=proxyUrl(url);
+  try{
+    const response=await fetch(target,{cache:"no-store"});
+    if(!response.ok){
+      const message=(await response.text()).slice(0,500).replace(/\s+/g," ").trim();
+      throw new Error(message||("Proxy returned HTTP "+response.status));
+    }
+  }catch(err){
+    showError("Could not load "+url+" — "+(err.message||"Proxy request failed"));
+    return;
+  }
 
   if(push){
     t.history=t.history.slice(0,t.pos+1);
@@ -83,7 +96,7 @@ async function load(url,push=true){
   homePage.hidden=true;
   frame.hidden=false;
   clearError();
-  frame.src=proxyUrl(url);
+  frame.src=target;
   renderTabs();
 }
 function showCurrent(){
@@ -106,7 +119,6 @@ function navigate(value){
 
 addressForm.addEventListener("submit",e=>{e.preventDefault();navigate(address.value)});
 homeForm.addEventListener("submit",e=>{e.preventDefault();navigate(homeInput.value)});
-frame.addEventListener("load",()=>{if(current().url)clearError()});
 frame.addEventListener("error",()=>showError("The proxy server could not load that page. Check the Render service logs for the /proxy request."));
 
 document.getElementById("back").onclick=()=>{
