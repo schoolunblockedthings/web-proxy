@@ -100,6 +100,10 @@ function requestHeaders(req, targetUrl = null) {
     headers.origin = targetUrl.origin;
   }
 
+  if (targetUrl && /(?:^|\.)duckduckgo\.com$/i.test(targetUrl.hostname) && !headers.referer) {
+    headers.referer = targetUrl.origin + "/";
+  }
+
   return headers;
 }
 
@@ -107,7 +111,14 @@ async function safeFetch(startUrl, options = {}) {
   let current = startUrl;
   let method = options.method || "GET";
   let body = options.body;
-  const headers = { ...(options.headers || {}) };\n  if (current.hostname.endsWith("duckduckgo.com")) {\n    headers.referer ||= current.origin + "/";\n    headers["sec-fetch-dest"] ||= "document";\n    headers["sec-fetch-mode"] ||= "navigate";\n    headers["sec-fetch-site"] ||= "same-site";\n    headers["sec-fetch-user"] ||= "?1";\n  }
+  const headers = { ...(options.headers || {}) };
+  if (current.hostname.endsWith("duckduckgo.com")) {
+    headers.referer ||= current.origin + "/";
+    headers["sec-fetch-dest"] ||= "document";
+    headers["sec-fetch-mode"] ||= "navigate";
+    headers["sec-fetch-site"] ||= "same-site";
+    headers["sec-fetch-user"] ||= "?1";
+  }
   for (let i = 0; i < 5; i++) {
     await assertPublicHost(current.hostname);
     const response = await fetch(current, {
