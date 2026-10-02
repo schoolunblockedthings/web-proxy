@@ -74,7 +74,7 @@ function requestHeaders(req, targetUrl = null) {
   const headers = {
     "user-agent": req.get("user-agent") || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
     "accept": req.get("accept") || "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "accept-language": req.get("accept-language") || "en-US,en;q=0.9"
+    "accept-language": req.get("accept-language") || "en-US,en;q=0.9",\n    "sec-fetch-dest": req.get("sec-fetch-dest") || "document",\n    "sec-fetch-mode": req.get("sec-fetch-mode") || "navigate",\n    "sec-fetch-site": req.get("sec-fetch-site") || "cross-site",\n    "sec-fetch-user": req.get("sec-fetch-user") || "?1"
   };
 
   for (const name of ["cookie","content-type","authorization","range"]) {
@@ -107,7 +107,7 @@ async function safeFetch(startUrl, options = {}) {
   let current = startUrl;
   let method = options.method || "GET";
   let body = options.body;
-  const headers = { ...(options.headers || {}) };
+  const headers = { ...(options.headers || {}) };\n  if (current.hostname.endsWith("duckduckgo.com")) {\n    headers.referer ||= current.origin + "/";\n    headers["sec-fetch-dest"] ||= "document";\n    headers["sec-fetch-mode"] ||= "navigate";\n    headers["sec-fetch-site"] ||= "same-site";\n    headers["sec-fetch-user"] ||= "?1";\n  }
   for (let i = 0; i < 5; i++) {
     await assertPublicHost(current.hostname);
     const response = await fetch(current, {
