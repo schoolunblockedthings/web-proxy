@@ -94,7 +94,7 @@ function proxiedUrl(base, value) {
 function rewriteSrcset(base, value) {
   if (!value) return value;
   return value.split(",").map(part => {
-    const bits = part.trim().split(/\\s+/);
+    const bits = part.trim().split(/\s+/);
     if (!bits[0]) return part;
     bits[0] = proxiedUrl(base, bits[0]);
     return bits.join(" ");
@@ -105,31 +105,20 @@ function rewriteCss(base, css) {
     (_, before, value, after) => "url(" + before + proxiedUrl(base, value.trim()) + after + ")");
 }
 function runtimeBridge() {
-  return \`
-<script>
-(function(){
-  const proxy = function(value){
-    try {
-      const u = new URL(value, document.baseURI);
-      if (u.protocol === "http:" || u.protocol === "https:") return "/proxy?url=" + encodeURIComponent(u.href);
-    } catch(e) {}
-    return value;
-  };
-  const originalFetch = window.fetch;
-  if (originalFetch) window.fetch = function(input, init){
-    try {
-      if (typeof input === "string") input = proxy(input);
-      else if (input && input.url) input = proxy(input.url);
-    } catch(e) {}
-    return originalFetch.call(this, input, init);
-  };
-  const originalOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url){
-    arguments[1] = proxy(url);
-    return originalOpen.apply(this, arguments);
-  };
-})();
-</script>\`;
+  return '<script>' +
+    '(function(){' +
+    'const proxy=function(value){' +
+    'try{const u=new URL(value,document.baseURI);' +
+    'if(u.protocol==="http:"||u.protocol==="https:") return "/proxy?url="+encodeURIComponent(u.href);' +
+    '}catch(e){} return value;};' +
+    'const originalFetch=window.fetch;' +
+    'if(originalFetch) window.fetch=function(input,init){' +
+    'try{if(typeof input==="string") input=proxy(input); else if(input&&input.url) input=proxy(input.url);}' +
+    'catch(e){} return originalFetch.call(this,input,init);};' +
+    'const originalOpen=XMLHttpRequest.prototype.open;' +
+    'XMLHttpRequest.prototype.open=function(method,url){arguments[1]=proxy(url);return originalOpen.apply(this,arguments);};' +
+    '})();' +
+    '</script>';
 }
 function rewriteHtml(html, baseUrl) {
   const $ = cheerio.load(html, { decodeEntities: false });
@@ -167,7 +156,7 @@ app.get("/proxy", async (req, res) => {
     res.set("x-proxy-url", url.href);
     if (/text\/html|application\/xhtml\+xml/i.test(type)) {
       res.type("html").send(rewriteHtml(body.toString("utf8"), url));
-    } else if (/text\\/css/i.test(type)) {
+    } else if (/text\/css/i.test(type)) {
       res.set("content-type", type).send(rewriteCss(url, body.toString("utf8")));
     } else {
       res.set("content-type", type).send(body);
