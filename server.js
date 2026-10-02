@@ -127,6 +127,28 @@ function rewriteCss(base, css) {
   return css.replace(/url\((\s*["\']?)([^"\')]+)(["\']?\s*)\)/gi,
     (_, before, value, after) => "url(" + before + proxiedUrl(base, value.trim()) + after + ")");
 }
+function rewriteJavaScript(base, code) {
+  if (!code) return code;
+  const rewrite = value => proxiedUrl(base, value);
+
+  code = code.replace(
+    /\b(import|export)\s+(?:[^"'\n]*?\s+from\s*)?["']([^"']+)["']/g,
+    (full, keyword, value) => full.replace(value, rewrite(value))
+  );
+
+  code = code.replace(
+    /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
+    (full, value) => full.replace(value, rewrite(value))
+  );
+
+  code = code.replace(
+    /\bnew\s+URL\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)/g,
+    (full, value) => 'new URL(' + JSON.stringify(rewrite(value)) + ', location.origin)'
+  );
+
+  return code;
+}
+
 function runtimeBridge(siteBase) {
   return '<script>' +
     '(function(){' +
@@ -216,6 +238,8 @@ app.all("/proxy", async (req, res) => {
       res.type("html").send(rewriteHtml(body.toString("utf8"), url));
     } else if (/text\/css/i.test(type)) {
       res.set("content-type", type).send(rewriteCss(url, body.toString("utf8")));
+    } else if (/(?:javascript|ecmascript)/i.test(type) || /\.m?js(?:$|[?#])/i.test(url.pathname)) {
+      res.set("content-type", type).send(rewriteJavaScript(url, body.toString("utf8")));
     } else {
       res.set("content-type", type).send(body);
     }
@@ -255,6 +279,8 @@ app.use(async (req, res, next) => {
       res.type("html").send(rewriteHtml(body.toString("utf8"), result.url));
     } else if (/text\/css/i.test(type)) {
       res.set("content-type", type).send(rewriteCss(result.url, body.toString("utf8")));
+    } else if (/(?:javascript|ecmascript)/i.test(type) || /\.m?js(?:$|[?#])/i.test(result.url.pathname)) {
+      res.set("content-type", type).send(rewriteJavaScript(result.url, body.toString("utf8")));
     } else {
       res.set("content-type", type).send(body);
     }
