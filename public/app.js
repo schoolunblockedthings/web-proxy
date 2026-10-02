@@ -35,7 +35,7 @@ function normalize(value){
       return null;
     }else{
       const looksLikeHost=/^[^\s/?#]+\.[^\s/?#]+(?:[/?#]|$)/.test(value);
-      value=looksLikeHost ? "https://"+value : "https://lite.duckduckgo.com/lite/?q="+encodeURIComponent(value);
+      value=looksLikeHost ? "https://"+value : "https://searx.tiekoetter.com/search?q="+encodeURIComponent(value)+"&language=en-US&categories=general";
     }
   }
   try{
