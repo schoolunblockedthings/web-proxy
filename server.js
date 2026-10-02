@@ -140,6 +140,16 @@ function runtimeBridge() {
     'catch(e){} return originalFetch.call(this,input,init);};' +
     'const originalOpen=XMLHttpRequest.prototype.open;' +
     'XMLHttpRequest.prototype.open=function(method,url){arguments[1]=proxy(url);return originalOpen.apply(this,arguments);};' +
+    'const originalPush=history.pushState;' +
+    'history.pushState=function(state,title,url){return originalPush.call(this,state,title,proxy(url));};' +
+    'const originalReplace=history.replaceState;' +
+    'history.replaceState=function(state,title,url){return originalReplace.call(this,state,title,proxy(url));};' +
+    'document.addEventListener("click",function(e){' +
+    'const a=e.target.closest&&e.target.closest("a[href]");' +
+    'if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;' +
+    'try{const u=new URL(a.href);if((u.protocol==="http:"||u.protocol==="https:")&&u.origin!==location.origin){e.preventDefault();location.href=proxy(u.href);}}catch(err){}' +
+    '},true);' +
+    'window.open=function(url){try{return window.open(proxy(url));}catch(e){return null;}};' +
     '})();' +
     '</script>';
 }
@@ -157,7 +167,7 @@ function rewriteHtml(html, baseUrl) {
   $("[style]").each((_, el) => $(el).attr("style", rewriteCss(resourceBase, $(el).attr("style"))));
   $("style").each((_, el) => $(el).html(rewriteCss(resourceBase, $(el).html() || "")));
   $("link[href]").each((_, el) => $(el).attr("href", proxiedUrl(resourceBase, $(el).attr("href"))));
-  $("form[action]").each((_, el) => $(el).attr("action", proxiedUrl(baseUrl, $(el).attr("action"))));
+  $("form[action]").each((_, el) => $(el).attr("action", proxiedUrl(resourceBase, $(el).attr("action"))));
   $("meta[http-equiv='refresh']").each((_, el) => {
     const content=$(el).attr("content") || "";
     const match=content.match(/url=(.+)$/i);
