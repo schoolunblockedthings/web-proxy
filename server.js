@@ -58,16 +58,48 @@ async function assertPublicHost(hostname) {
   }
 }
 
-function requestHeaders(req) {
+function upstreamUrlFromProxy(value) {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value, "http://proxy.local");
+    if (parsed.pathname !== "/proxy") return null;
+    const target = parsed.searchParams.get("url");
+    return target ? new URL(target) : null;
+  } catch {
+    return null;
+  }
+}
+
+function requestHeaders(req, targetUrl = null) {
   const headers = {
     "user-agent": req.get("user-agent") || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
     "accept": req.get("accept") || "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "accept-language": req.get("accept-language") || "en-US,en;q=0.9"
   };
-  for (const name of ["cookie","content-type","referer","origin","authorization","range"]) {
+
+  for (const name of ["cookie","content-type","authorization","range"]) {
     const value = req.get(name);
     if (value) headers[name] = value;
   }
+
+  const browserReferer = req.get("referer");
+  const upstreamReferer = upstreamUrlFromProxy(browserReferer);
+  if (upstreamReferer) {
+    headers.referer = upstreamReferer.href;
+  } else if (browserReferer) {
+    headers.referer = browserReferer;
+  }
+
+  const browserOrigin = req.get("origin");
+  const upstreamOrigin = upstreamUrlFromProxy(browserOrigin);
+  if (upstreamOrigin) {
+    headers.origin = upstreamOrigin.origin;
+  } else if (browserOrigin) {
+    headers.origin = browserOrigin;
+  } else if (targetUrl) {
+    headers.origin = targetUrl.origin;
+  }
+
   return headers;
 }
 
@@ -213,7 +245,7 @@ app.all("/proxy", async (req, res) => {
   try {
     const { response, url } = await safeFetch(target, {
       method: req.method,
-      headers: requestHeaders(req),
+      headers: requestHeaders(req, target),
       body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body
     });
     const type = response.headers.get("content-type") || "application/octet-stream";
@@ -264,7 +296,7 @@ app.use(async (req, res, next) => {
     const target = new URL(req.originalUrl, base);
     const result = await safeFetch(target, {
       method: req.method,
-      headers: requestHeaders(req),
+      headers: requestHeaders(req, target),
       body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body
     });
 
