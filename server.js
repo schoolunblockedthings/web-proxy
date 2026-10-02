@@ -101,7 +101,7 @@ function rewriteSrcset(base, value) {
   }).join(", ");
 }
 function rewriteCss(base, css) {
-  return css.replace(/url\\((\\s*["']?)([^"')]+)(["']?\\s*)\\)/gi,
+  return css.replace(/url\((\s*["\']?)([^"\')]+)(["\']?\s*)\)/gi,
     (_, before, value, after) => "url(" + before + proxiedUrl(base, value.trim()) + after + ")");
 }
 function runtimeBridge() {
