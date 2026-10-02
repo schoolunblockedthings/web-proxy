@@ -1,146 +1,195 @@
-const tabsEl=document.getElementById("tabs"),frame=document.getElementById("frame"),homePage=document.getElementById("homePage"),address=document.getElementById("address"),addressForm=document.getElementById("addressForm"),homeForm=document.getElementById("homeForm"),homeInput=document.getElementById("homeInput"),error=document.getElementById("error");
-let tabs=[],active=0;
+const tabsEl=document.getElementById("tabs");
+const frame=document.getElementById("frame");
+const homePage=document.getElementById("homePage");
+const address=document.getElementById("address");
+const addressForm=document.getElementById("addressForm");
+const homeForm=document.getElementById("homeForm");
+const homeInput=document.getElementById("homeInput");
+const error=document.getElementById("error");
+
+let tabs=[];
+let active=0;
 const KEY="proxy-theme";
 
-function makeTab(url=null){
-  const id=Date.now()+Math.random();
-  tabs.push({id,url,title:url?new URL(url).hostname:"New Tab",history:[],pos:-1});
-  active=tabs.length-1;
-  renderTabs();
-  load(url,false);
-}
-function current(){return tabs[active]}
-function renderTabs(){
-  tabsEl.innerHTML="";
-  tabs.forEach((t,i)=>{
-    const el=document.createElement("div");
-    el.className="tab"+(i===active?" active":"");
-    el.innerHTML='<span>🌐</span><span class="tab-title"></span><button class="tab-close" title="Close">×</button>';
-    el.querySelector(".tab-title").textContent=t.title;
-    el.addEventListener("click",()=>{active=i;renderTabs();showCurrent()});
-    el.querySelector(".tab-close").addEventListener("click",e=>{e.stopPropagation();closeTab(i)});
-    tabsEl.appendChild(el);
-  });
-}
-function closeTab(i){
-  if(tabs.length===1){
-    tabs[0]={...tabs[0],url:null,title:"New Tab",history:[],pos:-1};
-    active=0;
-  }else{
-    tabs.splice(i,1);
-    active=Math.min(active,tabs.length-1);
-  }
-  renderTabs();
-  showCurrent();
-}
-function normalize(v){
-  v=v.trim();
-  if(!v)return null;
-  if(!/^https?:\/\//i.test(v))v="https://"+v;
+function current(){ return tabs[active]; }
+
+function normalize(value){
+  value=String(value||"").trim();
+  if(!value) return null;
+  if(!/^https?:\/\//i.test(value)) value="https://"+value;
   try{
-    const u=new URL(v);
-    return /^https?:$/.test(u.protocol)?u.href:null;
-  }catch{return null}
+    const u=new URL(value);
+    return /^https?:$/.test(u.protocol) ? u.href : null;
+  }catch(e){ return null; }
 }
-function proxyUrl(url){return window.location.origin+"/proxy?url="+encodeURIComponent(url)}
+
+function proxyUrl(url){
+  return "/proxy?url="+encodeURIComponent(url);
+}
+
 function showError(message){
   homePage.hidden=false;
   frame.hidden=true;
   error.textContent=message;
   error.hidden=false;
 }
-function clearError(){error.hidden=true;error.textContent=""}
 
-async function checkBackend(){
-  try{
-    const response=await fetch("/health",{cache:"no-store"});
-    if(!response.ok)throw new Error("HTTP "+response.status);
-    const data=await response.json();
-    if(!data.ok)throw new Error("Backend not ready");
-    return true;
-  }catch{
-    showError("The Node.js proxy is not connected. Open the Render .onrender.com URL for this app, not the GitHub Pages URL.");
-    return false;
-  }
+function clearError(){
+  error.hidden=true;
+  error.textContent="";
 }
 
-async function load(url,push=true){
-  const t=current();
-  if(!url){
-    t.url=null;t.title="New Tab";frame.hidden=true;homePage.hidden=false;address.value="";clearError();return;
+function renderTabs(){
+  tabsEl.innerHTML="";
+  tabs.forEach(function(tab,index){
+    const el=document.createElement("div");
+    el.className="tab"+(index===active?" active":"");
+    el.innerHTML='<span>🌐</span><span class="tab-title"></span><button class="tab-close" type="button">×</button>';
+    el.querySelector(".tab-title").textContent=tab.title;
+    el.addEventListener("click",function(){
+      active=index;
+      renderTabs();
+      showCurrent();
+    });
+    el.querySelector(".tab-close").addEventListener("click",function(e){
+      e.stopPropagation();
+      closeTab(index);
+    });
+    tabsEl.appendChild(el);
+  });
+}
+
+function makeTab(){
+  tabs.push({url:null,title:"New Tab",history:[],pos:-1});
+  active=tabs.length-1;
+  renderTabs();
+  showCurrent();
+}
+
+function closeTab(index){
+  if(tabs.length===1){
+    tabs[0]={url:null,title:"New Tab",history:[],pos:-1};
+    active=0;
+  }else{
+    tabs.splice(index,1);
+    active=Math.min(active,tabs.length-1);
   }
+  renderTabs();
+  showCurrent();
+}
 
-  const backendReady=await checkBackend();
-  if(!backendReady)return;
-
-  const target=proxyUrl(url);
-  try{
-    const response=await fetch(target,{cache:"no-store"});
-    if(!response.ok){
-      const message=(await response.text()).slice(0,500).replace(/\s+/g," ").trim();
-      throw new Error(message||("Proxy returned HTTP "+response.status));
-    }
-  }catch(err){
-    showError("Could not load "+url+" — "+(err.message||"Proxy request failed"));
+function openUrl(url,push){
+  const tab=current();
+  if(!url){
+    tab.url=null;
+    tab.title="New Tab";
+    tab.history=[];
+    tab.pos=-1;
+    address.value="";
+    frame.hidden=true;
+    homePage.hidden=false;
+    clearError();
     return;
   }
 
   if(push){
-    t.history=t.history.slice(0,t.pos+1);
-    t.history.push(url);
-    t.pos++;
+    tab.history=tab.history.slice(0,tab.pos+1);
+    tab.history.push(url);
+    tab.pos++;
   }
-  t.url=url;
-  try{t.title=new URL(url).hostname}catch{}
+
+  tab.url=url;
+  tab.title=new URL(url).hostname;
   address.value=url;
   homePage.hidden=true;
   frame.hidden=false;
   clearError();
-  frame.src=target;
+  frame.src=proxyUrl(url);
   renderTabs();
 }
+
+function navigate(value){
+  const url=normalize(value);
+  if(!url){
+    showError("Enter a valid web address, such as example.com.");
+    return;
+  }
+  openUrl(url,true);
+}
+
 function showCurrent(){
-  const t=current();
-  if(t.url){
-    address.value=t.url;
+  const tab=current();
+  if(tab && tab.url){
+    address.value=tab.url;
     homePage.hidden=true;
     frame.hidden=false;
     clearError();
-    frame.src=proxyUrl(t.url);
+    frame.src=proxyUrl(tab.url);
   }else{
-    load(null,false);
+    openUrl(null,false);
   }
 }
-function navigate(value){
-  const url=normalize(value);
-  if(!url){showError("Enter a valid web address, such as example.com.");return}
-  load(url,true);
-}
 
-addressForm.addEventListener("submit",e=>{e.preventDefault();navigate(address.value)});
-homeForm.addEventListener("submit",e=>{e.preventDefault();navigate(homeInput.value)});
-frame.addEventListener("error",()=>showError("The proxy server could not load that page. Check the Render service logs for the /proxy request."));
+addressForm.addEventListener("submit",function(e){
+  e.preventDefault();
+  e.stopPropagation();
+  navigate(address.value);
+});
 
-document.getElementById("back").onclick=()=>{
-  const t=current();
-  if(t.pos>0){t.pos--;t.url=t.history[t.pos];showCurrent()}
-};
-document.getElementById("forward").onclick=()=>{
-  const t=current();
-  if(t.pos<t.history.length-1){t.pos++;t.url=t.history[t.pos];showCurrent()}
-};
-document.getElementById("reload").onclick=()=>{
-  const t=current();
-  if(t.url)showCurrent();
-};
-document.getElementById("home").onclick=()=>load(null,false);
-document.getElementById("newTab").onclick=()=>makeTab();
+homeForm.addEventListener("submit",function(e){
+  e.preventDefault();
+  e.stopPropagation();
+  navigate(homeInput.value);
+});
 
-function setTheme(light){
+document.getElementById("back").addEventListener("click",function(){
+  const tab=current();
+  if(tab.pos>0){
+    tab.pos--;
+    tab.url=tab.history[tab.pos];
+    showCurrent();
+  }
+});
+
+document.getElementById("forward").addEventListener("click",function(){
+  const tab=current();
+  if(tab.pos<tab.history.length-1){
+    tab.pos++;
+    tab.url=tab.history[tab.pos];
+    showCurrent();
+  }
+});
+
+document.getElementById("reload").addEventListener("click",function(){
+  const tab=current();
+  if(tab.url) showCurrent();
+});
+
+document.getElementById("home").addEventListener("click",function(){
+  openUrl(null,false);
+});
+
+document.getElementById("newTab").addEventListener("click",makeTab);
+
+document.getElementById("theme").addEventListener("click",function(){
+  const light=!document.body.classList.contains("light");
   document.body.classList.toggle("light",light);
   document.getElementById("theme").textContent=light?"☾":"☀";
   localStorage.setItem(KEY,light?"light":"dark");
-}
-document.getElementById("theme").onclick=()=>setTheme(!document.body.classList.contains("light"));
-setTheme(localStorage.getItem(KEY)==="light");
+});
+
+frame.addEventListener("load",function(){
+  if(current() && current().url) clearError();
+});
+
+frame.addEventListener("error",function(){
+  showError("The proxy could not load this website.");
+});
+
+try{
+  const saved=localStorage.getItem(KEY)==="light";
+  document.body.classList.toggle("light",saved);
+  document.getElementById("theme").textContent=saved?"☾":"☀";
+}catch(e){}
+
 makeTab();
